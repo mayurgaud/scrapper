@@ -28,70 +28,81 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/', index);
 app.use('/users', users);
 app.get('/scrape', function (req, res) {
-    var url = 'http://www.commitstrip.com/en/2017/01/';
-    request(url, function (error, response, html) {
+    for (var j = 1; j <= 12; j++) {
+        var stripData = {
+            url: 'http://www.commitstrip.com/en/2014/' + ('0' + j).slice(-2) + '/',
+            month: j,
+            year: 2014
+        };
+        (function(stripData) {
+            request(stripData.url, function (error, response, html) {
 
-        // First we'll check to make sure no errors occurred when making the request
+                // First we'll check to make sure no errors occurred when making the request
 
-        if (!error) {
-            // Next, we'll utilize the cheerio library on the returned html which will essentially give us jQuery functionality
+                if (!error) {
+                    // Next, we'll utilize the cheerio library on the returned html which will essentially give us jQuery functionality
 
-            var $ = cheerio.load(html);
+                    var $ = cheerio.load(html);
 
-            // Finally, we'll define the variables we're going to capture
+                    // Finally, we'll define the variables we're going to capture
 
-            var title, frontImage, mainImage;
-            var json = {title: "", frontImage: "", mainImage: ""};
+                    var title, frontImage, mainImage;
+                    var strips = [];
+                    $('section > a').filter(function () {
+                        var data = $(this);
+                        //console.log(data);
+                        title = data.children().last().children().text();
+                        frontImage = data.children().first().attr('src');
+                        link = data.attr('href');
 
-            $('section > a').filter(function () {
-                var data = $(this);
-                //console.log(data);
-                title = data.children().last().children().text();
-                frontImage = data.children().first().attr('src');
-                link = data.attr('href');
+                        //console.log("asd", mainImg)
+                        strips.push({
+                            title: title,
+                            frontImage: frontImage,
+                            link: link,
+                            month: stripData.month,
+                            year: stripData.year
+                        });
+                    });
 
-                //console.log("asd", mainImg)
-                json.title = title;
-                json.frontImage = frontImage;
+                    for (var i = 0; i < strips.length; i++) {
+                        var asd = strips[i];
+                        (function (asd) {
+                            request({uri: asd.link}, function (error, res, newHtml) {
+                                if (!error) {
+                                    var $ = cheerio.load(newHtml);
+                                    var mainImg;
+                                    $('.entry-content > p > img').filter(function () {
+                                        mainImg = $(this).attr('src');
 
-                request(link, function (error, res, newHtml) {
-                    var mainImg = "";
-                    if (!error) {
-                        var $ = cheerio.load(newHtml);
-                        $('.entry-content > p > img').filter(function () {
-                            mainImg = $(this).attr('src');
+                                    });
 
-                        })
-                        json.mainImage = mainImg;
-                        //console.log(json);
-                        MongoClient.connect('mongodb://localhost:27017/commitStrip', function (err, db) {
-                            if (err) throw err;
-                            db.collection('strips').insertOne({
-                                "title": title,
-                                "frontImage": frontImage,
-                                "mainImage": mainImg,
-                                "imageYear": 2017,
-                                "imageMonth": 1
-                            }, function (err, result) {
-                                if (err) throw err;
+                                    MongoClient.connect('mongodb://localhost:27017/commitStrip', function (err, db) {
+                                        if (err) throw err;
+                                        db.collection('strips').insertOne({
+                                            "title": asd.title,
+                                            "frontImage": asd.frontImage,
+                                            "mainImage": mainImg,
+                                            "imageYear": asd.year,
+                                            "imageMonth": asd.month
+                                        }, function (err, result) {
+                                            if (err) throw err;
 
-                                console.log(result);
+                                            console.log(result);
+                                        });
+                                    })
+                                }
                             });
-                            // db.collection('strips').find().toArray(function (err, result) {
-                            //     if (err) throw err
-                            //
-                            //     console.log(result)
-                            // })
-                        })
+                        })(asd);
+
                     }
-                });
-                //json.mainImage = mainImg;
-                //console.log(json)
+                }
             })
+        })(stripData);
+
+    }
 
 
-        }
-    })
 });
 
 // catch 404 and forward to error handler
